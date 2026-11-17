@@ -1346,12 +1346,24 @@ fn code_registration_checks_only_adjacent_intervals_without_losing_overlap_safet
     // A gap between two neighbors remains valid.
     runtime.register_code(GuestAddress(0x2000), word.clone())?;
     // Predecessor and successor overlaps must both be refused.
-    assert!(runtime.register_code(GuestAddress(0x100c), word.clone()).is_err());
-    assert!(runtime.register_code(GuestAddress(0x2ff8), word.clone()).is_err());
+    assert!(
+        runtime
+            .register_code(GuestAddress(0x100c), word.clone())
+            .is_err()
+    );
+    assert!(
+        runtime
+            .register_code(GuestAddress(0x2ff8), word.clone())
+            .is_err()
+    );
     // Replacing the exact base is allowed, but may not grow into the next.
     let generation = runtime.register_code(GuestAddress(0x3000), word.clone())?;
     assert!(generation > 0);
-    assert!(runtime.register_code(GuestAddress(0x3000), vec![0; 0x2004]).is_err());
+    assert!(
+        runtime
+            .register_code(GuestAddress(0x3000), vec![0; 0x2004])
+            .is_err()
+    );
     // A failed registration must leave the previous mapping intact.
     assert!(runtime.region(GuestAddress(0x3000)).is_some());
     Ok(())
