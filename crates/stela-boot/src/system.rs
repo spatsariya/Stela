@@ -669,8 +669,21 @@ fn translation_store(
     crate::status::begin("Opening the translation cache");
     // Without a memory map the pack gets nothing; the parts' sizing
     // reports the map's absence.
-    let free = free_ram().map_or(0, |free| free.saturating_sub(pending));
+    let available = free_ram();
+    let free = available.as_ref().map_or(0, |bytes| bytes.saturating_sub(pending));
     let budget = stela_boot_core::host_memory::pack_budget(free, cores, cores);
+    // Record the inputs to the pack budget once per boot. The budget is
+    // computed from firmware-free RAM, not installed RAM; without these
+    // values a skipped pack looks like an unexplained memory shortage.
+    output::arguments(format_args!(
+        "BOOT TRANSLATIONS free_ram={}M pending={}M usable={}M cores={} budget={}M map_ok={}\n",
+        available.as_ref().map_or(0, |bytes| bytes / MIB),
+        pending / MIB,
+        free / MIB,
+        cores,
+        budget / MIB,
+        available.is_ok(),
+    ));
     let Some(store) = crate::engine::translations::read(budget) else {
         crate::status::done("none on this USB");
         return (files, storage);
