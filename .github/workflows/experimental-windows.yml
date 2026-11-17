@@ -168,8 +168,19 @@ jobs:
           tar -C app -xf app/Stela.app.tar
           echo "STELA_APP=$PWD/app/Stela.app" >> "$GITHUB_ENV"
 
-      - name: Fetch upstream sources
-        run: cargo xtask gpu fetch
+      - name: Fetch upstream sources (retry transient GitLab errors)
+        run: |
+          for attempt in 1 2 3 4; do
+            if cargo xtask gpu fetch; then
+              exit 0
+            fi
+            if [[ "$attempt" -eq 4 ]]; then
+              echo "::error::GPU source fetch failed after four attempts"
+              exit 1
+            fi
+            echo "::warning::GPU source fetch attempt $attempt failed; retrying"
+            sleep $((attempt * 20))
+          done
 
       # The complete corresponding source: the tracked tree (with
       # third_party/patches) and each submodule's files at its pin, limited
