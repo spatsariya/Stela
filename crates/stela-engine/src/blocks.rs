@@ -166,7 +166,10 @@ impl BlockRuntime {
         }
         if let Some((&start, _)) = self
             .regions
-            .range((core::ops::Bound::Excluded(base.0), core::ops::Bound::Unbounded))
+            .range((
+                core::ops::Bound::Excluded(base.0),
+                core::ops::Bound::Unbounded,
+            ))
             .next()
         {
             require!(
