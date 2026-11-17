@@ -461,20 +461,18 @@ impl Controller {
         let grant = self.power.grant(slot)?;
         let state = self.slots.get(usize::from(slot)).and_then(Option::as_ref);
         let Some(state) = state else {
-            // A root port's device that was refused or retired while it
-            // stayed connected keeps its grant until the port is reset or
-            // empties, and has no slot left: the port has no owner to
-            // retire, and its status is still read, so a disconnection is
-            // seen. Linux leaves such a port the same way after "unable to
-            // enumerate USB device". Under a hub the owner's record is
-            // required.
-            return if parent.is_none() {
-                Ok(None)
-            } else {
-                Err(BlockError::Unsupported(
-                    "USB current owner has no original slot metadata",
-                ))
-            };
+            // Address Device can fail after current was reserved and Disable
+            // Slot acknowledged. The original slot is gone, but its current
+            // grant must remain until a physical port reset or disconnection
+            // proves the old device cannot draw power. This applies to hub
+            // children as well as root ports. Never upgrade the old grant to
+            // a new owner or accept a changed parent generation.
+            if grant.parent_id != parent.map(|(id, _)| id) {
+                return Err(BlockError::Unsupported(
+                    "USB current owner original parent generation changed",
+                ));
+            }
+            return Ok(None);
         };
         if grant.generation != Some(state.generation) || grant.parent_id != parent.map(|(id, _)| id)
         {
