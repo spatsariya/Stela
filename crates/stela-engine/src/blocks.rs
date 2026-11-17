@@ -164,7 +164,11 @@ impl BlockRuntime {
                 "code registration overlaps an existing region"
             );
         }
-        if let Some((&start, _)) = self.regions.range((core::ops::Bound::Excluded(base.0), core::ops::Bound::Unbounded)).next() {
+        if let Some((&start, _)) = self
+            .regions
+            .range((core::ops::Bound::Excluded(base.0), core::ops::Bound::Unbounded))
+            .next()
+        {
             require!(
                 end <= start,
                 "code registration overlaps an existing region"
