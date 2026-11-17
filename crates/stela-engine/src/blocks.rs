@@ -174,7 +174,12 @@ impl BlockRuntime {
             .next_generation
             .checked_add(1)
             .ok_or(refuse!("code generation exhausted"))?;
-        self.loaded.retain(|_, block| block.region_base != base.0);
+        // A newly registered, disjoint region cannot have cached blocks
+        // belonging to it. Avoid scanning the entire loaded-block map on
+        // first registration; invalidate only when replacing a region.
+        if self.regions.contains_key(&base.0) {
+            self.loaded.retain(|_, block| block.region_base != base.0);
+        }
         self.regions.insert(
             base.0,
             CodeRegion {
