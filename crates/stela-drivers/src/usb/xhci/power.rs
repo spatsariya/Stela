@@ -843,6 +843,45 @@ impl Controller {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bus::dma::TestRegion;
+    use alloc::collections::BTreeMap;
+
+    #[test]
+    fn failed_child_address_keeps_current_until_acknowledged_hub_reset() {
+        // A failed Address Device retires the unpublished hardware slot, but
+        // its physical current grant remains until the port reset succeeds.
+        let nodes = BTreeMap::from([
+            (0, hub::model::Node::hub(HIGH_SPEED, 1)),
+            (1, hub::model::Node::leaf(HIGH_SPEED)),
+        ]);
+        let mut dma = TestRegion::new(256 * 1024 * 8);
+        let (mut controller, model) = hub::tests::controller(&mut dma, 32, nodes);
+        model.borrow_mut().answers = Some((1, 0));
+        let mut failures = Vec::new();
+        let devices = controller.enumerate(&mut dma, &mut failures);
+        assert_eq!(devices.len(), 1, "{failures:?}");
+        assert!(!failures.is_empty());
+        let hub_id = devices[0].id;
+        let parent = Some((hub_id.hardware_slot(), 1));
+        let abandoned = controller
+            .power
+            .port_owner(parent, 1)
+            .expect("failed child retained its physical current");
+        assert!(controller.slots[usize::from(abandoned)].is_none());
+
+        assert_eq!(controller.current_port_owner(Some((hub_id, 1)), 1), Ok(None));
+        assert_eq!(controller.power.port_owner(parent, 1), Some(abandoned));
+
+        // A foreign parent generation must never gain authority over the
+        // grant even when the old child's slot metadata is absent.
+        let previous = controller.power.inject_parent_identity(abandoned, None);
+        assert_eq!(previous, Some(hub_id));
+        assert!(controller.current_port_owner(Some((hub_id, 1)), 1).is_err());
+        controller.power.inject_parent_identity(abandoned, previous);
+
+        assert_eq!(controller.hub_port(hub_id, 1), Ok(Some(HIGH_SPEED)));
+        assert_eq!(controller.power.port_owner(parent, 1), None);
+    }
 
     #[test]
     fn saturated_route_ports_have_separate_current_owners_and_physical_reset_subtrees() {
