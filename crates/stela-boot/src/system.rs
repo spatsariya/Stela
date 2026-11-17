@@ -670,7 +670,9 @@ fn translation_store(
     // Without a memory map the pack gets nothing; the parts' sizing
     // reports the map's absence.
     let available = free_ram();
-    let free = available.as_ref().map_or(0, |bytes| bytes.saturating_sub(pending));
+    let free = available
+        .as_ref()
+        .map_or(0, |bytes| bytes.saturating_sub(pending));
     let budget = stela_boot_core::host_memory::pack_budget(free, cores, cores);
     // Record the inputs to the pack budget once per boot. The budget is
     // computed from firmware-free RAM, not installed RAM; without these
