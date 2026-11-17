@@ -510,3 +510,34 @@ fn translation_pack_budget_never_takes_guest_below_floor() {
         }
     }
 }
+
+fn pack_budget_linear_reference(free: u64, cores: usize, runners: usize) -> u64 {
+    let mut budget = free / PACK_SHARE / ALIGNMENT * ALIGNMENT;
+    while budget >= PACK_FLOOR {
+        let left = free.saturating_sub(budget + PACK_MARGIN);
+        if estimate_guest(left, cores, runners).is_ok_and(|guest| guest >= GUEST_FLOOR) {
+            return budget;
+        }
+        budget -= ALIGNMENT;
+    }
+    0
+}
+
+#[test]
+fn binary_search_pack_budget_matches_original_linear_search() {
+    // Include low-RAM boundaries, typical desktop sizes, and large hosts.
+    // A future change to the guest-sizing model must preserve the maximum
+    // valid aligned budget, or revisit the monotonicity assumption.
+    for cores in [1, 2, 4, 8, 16, 32, 64] {
+        for gib in [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
+            for extra in [0, 128, 512] {
+                let free = gib * GIB + extra * MIB;
+                assert_eq!(
+                    pack_budget(free, cores, cores),
+                    pack_budget_linear_reference(free, cores, cores),
+                    "{gib} GiB + {extra} MiB, {cores} cores"
+                );
+            }
+        }
+    }
+}
