@@ -755,7 +755,14 @@ impl Host {
             self.retire(owner, changes)?;
         }
         let mut c = self.controller.borrow_mut();
-        if owner.is_some() && status & 1 == 0 {
+        // A failed Address Device can leave a reserved current grant with no
+        // live slot. An observed disconnect, unlike a mere status change,
+        // proves that the abandoned downstream grant can be released.
+        if status & 1 == 0
+            && c.power
+                .port_owner(Some((id.hardware_slot(), port)), attachment.root_port)
+                .is_some()
+        {
             c.current_hub_port_reset(id, port, attachment.root_port)?;
         }
         let selectors: &[(u16, u16)] = if ss {

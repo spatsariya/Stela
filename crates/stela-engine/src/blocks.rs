@@ -155,9 +155,25 @@ impl BlockRuntime {
             .0
             .checked_add(source.len() as u64)
             .ok_or(refuse!("code region overflow"))?;
-        for (&start, region) in &self.regions {
+        // Regions are disjoint and ordered by base. Only the immediate
+        // predecessor and successor can overlap the new interval; scanning
+        // every registered region made each registration O(number of regions).
+        if let Some((&start, region)) = self.regions.range(..=base.0).next_back() {
             require!(
-                start == base.0 || end <= start || base.0 >= region.end,
+                start == base.0 || region.end <= base.0,
+                "code registration overlaps an existing region"
+            );
+        }
+        if let Some((&start, _)) = self
+            .regions
+            .range((
+                core::ops::Bound::Excluded(base.0),
+                core::ops::Bound::Unbounded,
+            ))
+            .next()
+        {
+            require!(
+                end <= start,
                 "code registration overlaps an existing region"
             );
         }
@@ -165,7 +181,12 @@ impl BlockRuntime {
             .next_generation
             .checked_add(1)
             .ok_or(refuse!("code generation exhausted"))?;
-        self.loaded.retain(|_, block| block.region_base != base.0);
+        // A newly registered, disjoint region cannot have cached blocks
+        // belonging to it. Avoid scanning the entire loaded-block map on
+        // first registration; invalidate only when replacing a region.
+        if self.regions.contains_key(&base.0) {
+            self.loaded.retain(|_, block| block.region_base != base.0);
+        }
         self.regions.insert(
             base.0,
             CodeRegion {

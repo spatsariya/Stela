@@ -476,3 +476,68 @@ fn each_runners_pool_gives_the_kernel_half_what_it_needs_and_the_user_half_the_r
     // A tiny pool's halves never go below a page each.
     assert_eq!(upper_half(2 * PAGE, 64 * GIB, PAGE), PAGE);
 }
+
+#[test]
+fn translation_pack_budget_on_64_gib_eight_runner_host_is_nonzero() {
+    // Regression guard for the boot diagnostic: a host with plenty of free
+    // RAM should have a translation-pack allowance unless another boot-time
+    // reservation has reduced the measured free RAM.
+    let free = free(64);
+    let budget = pack_budget(free, 8, 8);
+    assert!(budget >= PACK_FLOOR, "budget={budget}");
+    assert_eq!(budget % ALIGNMENT, 0);
+    assert!(budget <= free / PACK_SHARE);
+    let remaining = free.saturating_sub(budget + PACK_MARGIN);
+    assert!(estimate_guest(remaining, 8, 8).unwrap() >= GUEST_FLOOR);
+}
+
+#[test]
+fn translation_pack_budget_never_takes_guest_below_floor() {
+    for cores in [2, 4, 8, 16] {
+        for installed in [8, 12, 16, 32, 64] {
+            let free = free(installed);
+            let budget = pack_budget(free, cores, cores);
+            assert_eq!(budget % ALIGNMENT, 0);
+            assert!(budget <= free / PACK_SHARE);
+            if budget != 0 {
+                assert!(budget >= PACK_FLOOR);
+                let remaining = free.saturating_sub(budget + PACK_MARGIN);
+                assert!(
+                    estimate_guest(remaining, cores, cores).unwrap() >= GUEST_FLOOR,
+                    "{installed} GiB, {cores} cores"
+                );
+            }
+        }
+    }
+}
+
+fn pack_budget_linear_reference(free: u64, cores: usize, runners: usize) -> u64 {
+    let mut budget = free / PACK_SHARE / ALIGNMENT * ALIGNMENT;
+    while budget >= PACK_FLOOR {
+        let left = free.saturating_sub(budget + PACK_MARGIN);
+        if estimate_guest(left, cores, runners).is_ok_and(|guest| guest >= GUEST_FLOOR) {
+            return budget;
+        }
+        budget -= ALIGNMENT;
+    }
+    0
+}
+
+#[test]
+fn binary_search_pack_budget_matches_original_linear_search() {
+    // Include low-RAM boundaries, typical desktop sizes, and large hosts.
+    // A future change to the guest-sizing model must preserve the maximum
+    // valid aligned budget, or revisit the monotonicity assumption.
+    for cores in [1, 2, 4, 8, 16, 32, 64] {
+        for gib in [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
+            for extra in [0, 128, 512] {
+                let free = gib * GIB + extra * MIB;
+                assert_eq!(
+                    pack_budget(free, cores, cores),
+                    pack_budget_linear_reference(free, cores, cores),
+                    "{gib} GiB + {extra} MiB, {cores} cores"
+                );
+            }
+        }
+    }
+}

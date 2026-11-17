@@ -221,15 +221,32 @@ pub fn sizes(free: u64, cores: usize, runners: usize) -> Result<Sizes> {
 /// allocations. Zero, below [`PACK_FLOOR`]: the parts and the guest come
 /// first, and the pack never makes a boot fail.
 pub fn pack_budget(free: u64, cores: usize, runners: usize) -> u64 {
-    let mut budget = free / PACK_SHARE / ALIGNMENT * ALIGNMENT;
-    while budget >= PACK_FLOOR {
-        let left = free.saturating_sub(budget + PACK_MARGIN);
-        if estimate_guest(left, cores, runners).is_ok_and(|guest| guest >= GUEST_FLOOR) {
-            return budget;
-        }
-        budget -= ALIGNMENT;
+    // A larger pack leaves no more RAM for the guest. Search the aligned
+    // budget in logarithmic rather than linear steps: large-RAM machines
+    // otherwise repeatedly recompute the full host-memory layout.
+    let max_units = free / PACK_SHARE / ALIGNMENT;
+    let min_units = PACK_FLOOR / ALIGNMENT;
+    if max_units < min_units {
+        return 0;
     }
-    0
+    let fits = |units: u64| {
+        let budget = units * ALIGNMENT;
+        let left = free.saturating_sub(budget.saturating_add(PACK_MARGIN));
+        estimate_guest(left, cores, runners).is_ok_and(|guest| guest >= GUEST_FLOOR)
+    };
+    if !fits(min_units) {
+        return 0;
+    }
+    let (mut low, mut high) = (min_units, max_units);
+    while low < high {
+        let middle = low + (high - low).div_ceil(2);
+        if fits(middle) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    low * ALIGNMENT
 }
 
 fn estimate_guest(free: u64, cores: usize, runners: usize) -> Result<u64> {

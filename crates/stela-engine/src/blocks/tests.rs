@@ -1334,3 +1334,37 @@ mod trap_validation {
         assert!(validate_trap_exit(base, terminal, 8, base.0, &ordinary).is_err());
     }
 }
+
+#[test]
+fn code_registration_checks_only_adjacent_intervals_without_losing_overlap_safety() -> Result<()> {
+    let cache = tempfile::tempdir()?;
+    let mut runtime = BlockRuntime::new(77, cache.path().to_owned());
+    let word = vec![0u8; 16];
+    runtime.register_code(GuestAddress(0x1000), word.clone())?;
+    runtime.register_code(GuestAddress(0x3000), word.clone())?;
+    runtime.register_code(GuestAddress(0x5000), word.clone())?;
+    // A gap between two neighbors remains valid.
+    runtime.register_code(GuestAddress(0x2000), word.clone())?;
+    // Predecessor and successor overlaps must both be refused.
+    assert!(
+        runtime
+            .register_code(GuestAddress(0x100c), word.clone())
+            .is_err()
+    );
+    assert!(
+        runtime
+            .register_code(GuestAddress(0x2ff8), word.clone())
+            .is_err()
+    );
+    // Replacing the exact base is allowed, but may not grow into the next.
+    let generation = runtime.register_code(GuestAddress(0x3000), word.clone())?;
+    assert!(generation > 0);
+    assert!(
+        runtime
+            .register_code(GuestAddress(0x3000), vec![0; 0x2004])
+            .is_err()
+    );
+    // A failed registration must leave the previous mapping intact.
+    assert!(runtime.region(GuestAddress(0x3000)).is_some());
+    Ok(())
+}

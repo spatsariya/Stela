@@ -106,3 +106,7 @@ jobs:
 
       - name: Test
         run: cargo test --locked -p stela-cli --lib
+
+      - name: USB hub lifecycle regression
+        if: matrix.system == 'linux'
+        run: cargo test --locked -p stela-drivers --lib failed_child_address_keeps_current_until_acknowledged_hub_reset
