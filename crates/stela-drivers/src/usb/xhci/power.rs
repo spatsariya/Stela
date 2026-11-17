@@ -869,7 +869,10 @@ mod tests {
             .expect("failed child retained its physical current");
         assert!(controller.slots[usize::from(abandoned)].is_none());
 
-        assert_eq!(controller.current_port_owner(Some((hub_id, 1)), 1), Ok(None));
+        assert_eq!(
+            controller.current_port_owner(Some((hub_id, 1)), 1),
+            Ok(None)
+        );
         assert_eq!(controller.power.port_owner(parent, 1), Some(abandoned));
 
         // A foreign parent generation must never gain authority over the
