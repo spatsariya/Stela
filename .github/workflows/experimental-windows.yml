@@ -2,10 +2,8 @@
 # Does not publish a release or modify main. Large GPU/EFI build can take hours.
 # One self-contained `stela` per platform. `stela` embeds stela.efi, which
 # carries the StelaGPU kext; the kext carries the Metal bundle and Stela.app.
-# So the chain runs: Stela.app (macOS) -> stela.efi (Linux) -> stela for
-# Linux, Windows and macOS -> release.
-#
-# Runs only for a pushed `v*` tag, and publishes that tag's release.
+# The chain runs: Stela.app (macOS) -> stela.efi (Linux) ->
+# Windows stela.exe artifact. No release is published.
 name: experimental-windows-build
 
 on:
@@ -17,7 +15,8 @@ permissions:
 
 concurrency:
   group: experimental-windows-${{ github.ref }}
-  cancel-in-progress: false
+  # A new experimental commit supersedes the old EFI/Windows build.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
